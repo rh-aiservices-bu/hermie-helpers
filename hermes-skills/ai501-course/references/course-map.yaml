@@ -1,0 +1,105 @@
+content_root_env: AI501_CONTENT_DIR
+default_content_root: /app/.hermes/ai501-content
+primary_repository: lab-instructions
+modules:
+  - id: 1-the-ai-orientation
+    label: The AI Orientation
+    reference: 01-ai-orientation.md
+    exercises:
+      - [2a-model-mannerisms, Model Mannerisms]
+      - [2b-prompting-principles, Prompting Principles]
+      - [2c-model-mechanics, Model Mechanics]
+  - id: 2-linguistics
+    label: Linguistics
+    reference: 02-linguistics.md
+    exercises:
+      - [1-prompt-engineering, Prompt Engineering]
+      - [2-prompt-versioning, Prompt Versioning]
+      - [3-canopy-ai, Canopy]
+  - id: 3-ready-to-scale-101
+    label: Ready to Scale 101
+    reference: 03-ready-to-scale-101.md
+    exercises:
+      - [1-into-the-workspace, Into the Workspace]
+      - [2-intro-to-backend, Intro to Backend]
+      - [3-gitops, GitOps]
+      - [4-deploy-canopy, Deploy Canopy]
+  - id: 4-ready-to-scale-201
+    label: Ready to Scale 201
+    reference: 04-ready-to-scale-201.md
+    exercises:
+      - [1-evaluate-genai-applications, GenAI Application Evaluation]
+      - [2-kubeflow-pipelines, Automate It with Kubeflow]
+      - [3-automate-with-tekton, Pipeline of Pipelines]
+  - id: 5-grounded-ai
+    label: The Library
+    reference: 05-grounded-ai.md
+    exercises:
+      - [1-intro-to-rag, Intro to RAG]
+      - [2-rag-basics, Understanding RAG]
+      - [3-vector-databases, Vector Stores and Milvus]
+      - [4-docling, Document Intelligence with Docling]
+      - [5-bring-rag-to-prod, Prepare Prod]
+      - [6-populate-test-and-prod, RAG Pipelines]
+      - [7-integrate-into-canopy, Canopy with RAG]
+      - [8-rag-evals, RAG Evals]
+      - [9-end-to-end, End-to-End Pipeline]
+  - id: 6-observability
+    label: The AI Watcher
+    reference: 06-observability.md
+    exercises:
+      - [2-metrics, Metrics]
+      - [3-logging, Logging]
+      - [4-tracing, Tracing]
+      - [5-feedback-loops, Feedback Loops]
+      - [6-extra-credit-metrics-dashboard, Metrics Dashboard]
+      - [7-extra-credits-prompt-optimization, Prompt Optimization]
+  - id: 7-honor-code
+    label: The Honor Code
+    reference: 07-honor-code.md
+    exercises:
+      - [1-guardrails, Guardrails]
+      - [2-nemo-guardrails, NeMo Guardrails]
+      - [3-llama-stack-integration, Llama Stack Integration]
+      - [4-automate-checks, Automate Guardrail Checks]
+      - [5-canopy-with-guardrails, Canopy with Guardrails]
+  - id: 8-agents
+    label: Autonomous Systems 101
+    reference: 08-agents.md
+    exercises:
+      - [0-intro-to-agents, Intro to Agents]
+      - [1-what-are-tools, What are Tools]
+      - [2-agentic-workflows, Agentic Workflows]
+      - [3-agentic-llamas, Agentic Llamas]
+      - [4-take-agents-to-prod, Take Agents to Prod]
+      - [5-evaluate-agents, Evaluate Agents]
+      - [6-securing-mcp-servers, Securing MCP Servers]
+  - id: 9-on-prem-practicum
+    label: On-Prem Practicum
+    reference: 09-on-prem-practicum.md
+    exercises:
+      - [1-deploy-llms, Deploy LLMs]
+      - [2-update-canopy, Update Canopy]
+  - id: 10-model-optimization
+    label: The Fitness Program
+    reference: 10-model-optimization.md
+    exercises:
+      - [2-llm-compressor, LLM-Compressor]
+      - [4-evaluation, Evaluation]
+      - [5-update-canopy, Update Canopy]
+      - [99-extra-credits, Quantization Extra Credit]
+  - id: 11-maas
+    label: Supply and Demand 101
+    reference: 11-maas.md
+    exercises:
+      - [1-understanding-maas, Understanding MaaS]
+      - [2-deploy-litemaas, Deploy LiteMaaS]
+      - [3-canopy-integration, Canopy Integration]
+      - [4-take-it-to-prod, Take It to Prod Securely]
+  - id: 12-fine-tuning
+    label: The Tuning Room
+    reference: 12-fine-tuning.md
+    exercises:
+      - [1-fine-tune-a-model, Fine-Tune a Model]
+      - [2-deploy-to-canopy, Deploy to Canopy]
+

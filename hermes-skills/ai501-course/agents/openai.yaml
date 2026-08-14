@@ -1,0 +1,4 @@
+interface:
+  display_name: "AI501 Course Guide"
+  short_description: "Ground answers in current AI501 course content"
+  default_prompt: "Use $ai501-course to troubleshoot this AI501 lab issue using the current exercise content."
