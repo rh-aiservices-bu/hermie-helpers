@@ -1,100 +1,67 @@
-# Memory System Specification
+# AI501 Shared Memory Specification
 
-## Goals
+## Purpose
 
-- Persist memories across conversations for a team of users and agents
-- Each memory knows who was in the conversation (actors) and whether it is personal or team-wide
-- Retrieval is context-aware: same-actor memories rank highest, team memories equally, other actors' memories surface at lower weight
-- A dedicated memory agent handles per-turn deduplication and periodic pruning
+Hermie uses Mem0 as a shared troubleshooting knowledge base for AI501 deliveries.
+There are no attendee profiles, teams, or personal memories. A useful observation
+from one enablement may help learners at a later enablement.
 
----
+## Storage scope
 
-## Storage Model
+Every memory uses one shared Mem0 scope:
 
-### Actors
+| Mem0 field | Value |
+|---|---|
+| `user_id` | `__ai501_shared__` |
+| `agent_id` | `MEM0_AGENT_ID` (default `hermie`) |
+| `run_id` | Current ephemeral Hermes session |
+| `metadata.scope` | `shared_ai501` |
 
-Every memory records the participants in the conversation as a sorted, stable key:
+`run_id` gives Mem0 extraction short-term conversational context. Searches filter
+only by the shared `user_id` and `agent_id`, so retrieval crosses sessions and
+enablement locations.
 
+## Optional provenance
+
+The attendee UI prefixes the latest user turn with a machine-readable envelope:
+
+```text
+[AI501_CONTEXT]{"location_label":"Helsinki, Finland","location_city":"Helsinki","location_country":"Finland","module_id":"6-observability","exercise_id":"4-tracing"}[/AI501_CONTEXT]
 ```
-actor_key = sorted("type:id") joined by "|"
 
-Example: "agent:flaude|user:Erwan"
-```
+The plugin removes the envelope before extracting knowledge and copies supported
+fields into memory metadata:
 
-Supported actor types: `user`, `agent`.
-Multi-actor conversations (>2) extend the same key naturally.
+- `location_label`
+- `location_city`
+- `location_country`
+- `module_id` and `module_label`
+- `exercise_id` and `exercise_label`
 
-### Scope
+All fields are optional. The UI remains usable when a learner skips location and
+does not select course context.
 
-| Scope      | Meaning                                      |
-|------------|----------------------------------------------|
-| `personal` | Specific to this actor pair                  |
-| `team`     | Shared across all actors in the same group   |
+## Extraction policy
 
-### Mem0 field mapping
+Memories should capture reusable troubleshooting knowledge: symptom, evidence,
+diagnostic check, likely or confirmed cause, and resolution when confirmed.
 
-| Concept            | Mem0 field  | Value                         |
-|--------------------|-------------|-------------------------------|
-| Personal memory    | `user_id`   | actor key (e.g. `agent:flaude\|user:Erwan`) |
-| Team memory        | `user_id`   | `__team__`                    |
-| Group identifier   | `agent_id`  | `MEM0_GROUP_ID` (default: `hermes`) |
-| Session            | `run_id`    | Hermes session_id             |
+The extraction prompt must preserve uncertainty. An untested recommendation must
+not become a confirmed solution. Attendee identity, preferences, greetings, and
+questions without reusable diagnostic knowledge are not stored.
 
-All metadata (scope, actors, created_at) is stored in mem0's `metadata` field.
+When a location is supplied, it should appear naturally in the extracted memory,
+for example:
 
-### Group ID
+> During an AI501 run in Helsinki, Canopy traces were absent because the backend
+> tracing variables were missing. Adding the variables and redeploying resolved it.
 
-`MEM0_GROUP_ID` identifies the team/installation. All memories share this as `agent_id`,
-enabling cross-actor search via `filters: {agent_id: group_id}` without needing a filterless query.
+Hermie may mention a location only when it appears explicitly in a retrieved
+memory.
 
----
+## Retrieval
 
-## Search Tiers
+Each query performs one semantic search across the shared AI501 scope. Results are
+injected under `Shared AI501 troubleshooting memories`. Near-duplicate writes are
+skipped when an existing result has a similarity score of at least `0.92`.
 
-Every query runs three searches, results are deduplicated by id and ranked by `score × weight`:
-
-| Tier                  | Filter                                        | Weight |
-|-----------------------|-----------------------------------------------|--------|
-| Same-actor personal   | `user_id=actor_key, agent_id=group_id`        | 1.0    |
-| Team memories         | `user_id=__team__, agent_id=group_id`         | 1.0    |
-| Other actors          | `agent_id=group_id` (exclude own + team)      | 0.5    |
-
----
-
-## Deduplication
-
-Before writing, the store searches for near-identical memories (cosine similarity ≥ 0.92).
-If a match is found the write is skipped. Mem0's own internal deduplication also runs server-side.
-
----
-
-## Memory Agent (planned)
-
-A dedicated agent that replaces direct mem0 writes from the Hermes plugin.
-
-### Per-turn processing (`POST /process-turn`)
-
-1. Receive conversation turn (user + assistant messages, actor list, run_id)
-2. Use an LLM to extract candidate facts from the turn
-3. For each fact: search existing memories (same-actor scope)
-4. Decide per fact: **ADD** (new) / **SKIP** (redundant, sim ≥ 0.92) / **UPDATE** (contradicts existing)
-5. Write accepted facts to mem0 with `infer=False` (verbatim, LLM already extracted)
-6. Determine scope (personal vs team) based on fact content
-
-### Batch pruning (`POST /prune`)
-
-1. Fetch all memories for a user (or all users)
-2. LLM identifies: duplicates, contradictions, outdated facts
-3. Delete or merge accordingly
-4. Returns a pruning report
-
-The agent is deployed as a FastAPI service on OpenShift.
-The Hermes plugin routes `_bg_sync` through `MEMORY_AGENT_URL` if set, falling back to direct mem0 writes.
-
----
-
-## Breaking Change Note
-
-Migrating from the previous storage format (plain `user_id="Erwan"`) requires re-ingesting
-existing memories, as the new actor-key format (`user_id="agent:flaude|user:Erwan"`) does not
-match old records in search queries.

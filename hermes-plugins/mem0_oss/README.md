@@ -1,69 +1,17 @@
-# mem0_oss — Self-Hosted Mem0 Memory Provider for Hermes
+# mem0_oss — Shared AI501 Memory for Hermie
 
-Connects Hermes Agent to a self-hosted Mem0 server via REST.
-No SDK, no cloud account required.
-
-## Prerequisites
-
-- Mem0 deployed on OpenShift (see `mem0/mem0-openshift.yaml`)
-- Hermes Agent running on the same OpenShift cluster
-
-## Installation
-
-Copy the plugin files into Hermes's user plugin directory:
-
-```bash
-mkdir -p /opt/app-root/src/.hermes/plugins/mem0_oss
-cp __init__.py plugin.yaml /opt/app-root/src/.hermes/plugins/mem0_oss/
-```
-
-> `HERMES_HOME` defaults to `/opt/app-root/src/.hermes/` when running in the OpenShift container.
+This Hermes memory-provider plugin connects to the self-hosted Mem0 REST API and
+shares reusable troubleshooting knowledge across AI501 enablements.
 
 ## Configuration
 
-**1. Add env vars to `$HERMES_HOME/.env`:**
-
 ```bash
-# Use the internal Kubernetes service URL (not the external route)
-# — avoids SSL issues and is faster from within the cluster
-MEM0_URL=http://mem0-server:8000
-
-# If Hermes and mem0 are in different namespaces:
-# MEM0_URL=http://mem0-server.<mem0-namespace>.svc.cluster.local:8000
-
-MEM0_USER_ID=hermes-user
-# MEM0_AGENT_ID=hermes # Let it fetch automatically unless you want a specific name for it
+MEM0_URL=http://mem0-server.hermie-helpers.svc.cluster.local:8000
+MEM0_AGENT_ID=genaiops-hermie
+MEM0_CUSTOM_INSTRUCTIONS=
 ```
 
-**2. Set the memory provider in `$HERMES_HOME/config.yaml`:**
-
-```yaml
-memory:
-  provider: mem0_oss
-```
-
-> Note: this must go in `config.yaml`, **not** `cli-config.yaml`.
-
-## Per-profile/agent setup
-
-When using Hermes with named profiles (`hermes -p <profile_name>`), each profile has its own `HERMES_HOME` at `.hermes/profiles/<profile_name>/` and does **not** inherit the global config. You must configure mem0_oss in each profile separately.
-
-**1. Copy the plugin files into the profile's plugin directory:**
-
-```bash
-mkdir -p .hermes/profiles/<profile_name>/plugins/mem0_oss
-cp __init__.py plugin.yaml .hermes/profiles/<profile_name>/plugins/mem0_oss/
-```
-
-**2. Add env vars to `.hermes/profiles/<profile_name>/.env`:**
-
-```bash
-MEM0_URL=http://mem0-server:8000
-MEM0_USER_ID=<user-id>        # the user this agent runs as
-# MEM0_AGENT_ID=<agent-id>    # optional — defaults to hermes_<profile_name>
-```
-
-**3. Add the provider to `.hermes/profiles/<profile_name>/config.yaml`:**
+Activate it in Hermes `config.yaml`:
 
 ```yaml
 memory:
@@ -72,30 +20,17 @@ memory:
   provider: mem0_oss
 ```
 
-> Repeat this for every profile that should use mem0 memory.
+The Helm deployment copies this repository's `hermes-plugins` directory into the
+Hermes data volume during initialization.
 
-## Verify it works
+## Behavior
 
-Restart Hermes and check the startup logs for:
-```
-mem0_oss: connected to http://mem0-server:8000 (user=hermes-user)
-```
+- Searches one shared AI501 knowledge scope before each answer.
+- Extracts reusable troubleshooting knowledge asynchronously after each turn.
+- Stores optional enablement location and course context from the UI envelope.
+- Does not create attendee, username, personal, or team memory partitions.
+- Skips near-duplicate memories at a similarity score of `0.92` or higher.
+- Fails open when Mem0 is temporarily unavailable.
 
-Then ask Hermes to use its memory tools directly:
-```
-Search your memory for anything you know about me.
-```
+See [SPEC.md](SPEC.md) for the storage and provenance contract.
 
-You can also confirm memories are being stored by checking the Mem0 dashboard at the route exposed by your OpenShift deployment.
-
-## How it works
-
-| Event | What happens |
-|-------|-------------|
-| Each turn starts | Cached search results from the previous turn are injected into context |
-| After each turn | Conversation is sent to `POST /memories` in a background thread — LLM extracts facts automatically |
-| `mem0_search` tool | Agent searches memories semantically via `POST /search` |
-| `mem0_profile` tool | Agent retrieves all stored memories via `GET /memories` |
-| `mem0_conclude` tool | Agent stores a specific fact verbatim (no LLM extraction) via `POST /memories` with `infer: false` |
-
-A circuit breaker pauses API calls after 5 consecutive failures (2-minute cooldown), so Hermes keeps working even if mem0 is temporarily unavailable.
