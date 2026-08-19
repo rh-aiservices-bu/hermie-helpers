@@ -32,6 +32,8 @@ _CB_COOLDOWN  = 120.0
 _SHARED_USER_ID = "__ai501_shared__"
 _DEDUP_THRESHOLD = 0.92
 _CONTEXT_RE = re.compile(r"^\[AI501_CONTEXT\](\{.*?\})\[/AI501_CONTEXT\]\s*", re.DOTALL)
+_FEEDBACK_RE = re.compile(r"^\[AI501_FEEDBACK\](\{.*?\})\[/AI501_FEEDBACK\]\s*", re.DOTALL)
+_UI_METADATA_RE = re.compile(r"<!--HERMIE_UI:.*?-->", re.DOTALL)
 _CONTEXT_FIELDS = {
     "location_label",
     "location_city",
@@ -41,23 +43,55 @@ _CONTEXT_FIELDS = {
     "exercise_id",
     "exercise_label",
 }
+_DATA_IMAGE_RE = re.compile(r"data:image/[a-z0-9.+-]+;base64,[a-z0-9+/=\s]+", re.IGNORECASE)
 
 
-def _extract_ai501_context(message: str) -> tuple[str, Dict[str, str]]:
+def _text_only_content(content: Any) -> str:
+    """Return useful text while ensuring inline image bytes never reach Mem0."""
+    if isinstance(content, str):
+        content = _UI_METADATA_RE.sub("", content)
+        return _DATA_IMAGE_RE.sub("[screenshot attached]", content).strip()
+    if not isinstance(content, list):
+        return str(content or "")
+    parts: List[str] = []
+    for part in content:
+        if not isinstance(part, dict):
+            continue
+        if part.get("type") in {"text", "input_text"} and isinstance(part.get("text"), str):
+            text = _UI_METADATA_RE.sub("", part["text"])
+            parts.append(_DATA_IMAGE_RE.sub("[screenshot attached]", text).strip())
+        elif part.get("type") in {"image", "image_url", "input_image"}:
+            parts.append("[screenshot attached]")
+    return "\n".join(parts)
+
+
+def _extract_ai501_context(message: Any) -> tuple[str, Dict[str, str]]:
     """Remove the UI context envelope and return its safe provenance fields."""
+    message = _text_only_content(message)
     match = _CONTEXT_RE.match(message or "")
-    if not match:
-        return message, {}
-    try:
-        raw = json.loads(match.group(1))
-    except (TypeError, ValueError, json.JSONDecodeError):
-        return message, {}
-    context = {
-        key: str(value).strip()[:160]
-        for key, value in raw.items()
-        if key in _CONTEXT_FIELDS and value is not None and str(value).strip()
-    }
-    return message[match.end():], context
+    context: Dict[str, str] = {}
+    if match:
+        try:
+            raw = json.loads(match.group(1))
+        except (TypeError, ValueError, json.JSONDecodeError):
+            return message, {}
+        context = {
+            key: str(value).strip()[:160]
+            for key, value in raw.items()
+            if key in _CONTEXT_FIELDS and value is not None and str(value).strip()
+        }
+        message = message[match.end():]
+    feedback_match = _FEEDBACK_RE.match(message)
+    if feedback_match:
+        try:
+            feedback = json.loads(feedback_match.group(1))
+        except (TypeError, ValueError, json.JSONDecodeError):
+            feedback = {}
+        if feedback.get("outcome") == "resolved":
+            context["verification"] = "attendee_confirmed"
+            context["outcome"] = "resolved"
+        message = message[feedback_match.end():]
+    return message, context
 
 
 class Mem0OssProvider(MemoryProvider):
@@ -143,6 +177,7 @@ class Mem0OssProvider(MemoryProvider):
         """Instructions for extracting reusable, location-aware lab knowledge."""
         provenance = context.get("location_label", "not shared")
         course = context.get("exercise_label") or context.get("module_label") or "not selected"
+        verification = context.get("verification", "observed")
         prompt = f"""\
 AI501 SHARED TROUBLESHOOTING MEMORY (highest priority):
 Extract only knowledge that could help another AI501 learner with a similar problem.
@@ -150,12 +185,18 @@ Extract only knowledge that could help another AI501 learner with a similar prob
 Current provenance:
 - Enablement location: {provenance}
 - Course context: {course}
+- Verification: {verification}
 
 Good memories describe a concrete symptom, relevant evidence, likely or confirmed cause,
 useful diagnostic check, and resolution when one was actually confirmed. Keep uncertainty:
 do not turn a suggestion or untested hypothesis into a proven solution. Include the
 enablement location naturally when it was shared, for example "During an AI501 run in
 Paris, ...". Do not invent a city, country, module, exercise, command output, or result.
+
+When Verification is attendee_confirmed, the learner explicitly reported that the
+preceding proposed check or change fixed the issue. Preserve that as a verified
+resolution, but only name the cause or fix summarized in the exchange. Otherwise,
+treat the incident as observed and do not describe suggestions as confirmed.
 
 Do not extract attendee identity, personal preferences, greetings, generic questions,
 or a restatement that contains no reusable diagnostic knowledge. It is correct to return
@@ -226,6 +267,7 @@ an empty memory list when the exchange has not produced useful troubleshooting k
         )
 
     def prefetch(self, query: str, *, session_id: str = "") -> str:
+        query = _text_only_content(query)
         logger.info("mem0_oss.prefetch(query=%r, session=%r) — cache=%s",
                     query, session_id, bool(self._prefetch_cache))
         with self._lock:
@@ -249,6 +291,7 @@ an empty memory list when the exchange has not produced useful troubleshooting k
         return ""
 
     def queue_prefetch(self, query: str, *, session_id: str = "") -> None:
+        query = _text_only_content(query)
         logger.debug("mem0_oss.queue_prefetch(query=%r, session=%r)", query, session_id)
         threading.Thread(target=self._bg_prefetch, args=(query,), daemon=True).start()
 
@@ -288,6 +331,7 @@ an empty memory list when the exchange has not produced useful troubleshooting k
 
     def _bg_sync(self, user_msg: str, asst_msg: str) -> None:
         clean_user_msg, context = _extract_ai501_context(user_msg)
+        asst_msg = _text_only_content(asst_msg)
         provenance = []
         if context.get("location_label"):
             provenance.append(f"Enablement location: {context['location_label']}")
