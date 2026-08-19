@@ -11,9 +11,11 @@ Use current course sources before relying on general knowledge or shared memory.
 
 1. Parse an optional `[AI501_CONTEXT]...[/AI501_CONTEXT]` block. Treat its location,
    module, and exercise as hints. Do not quote the block or require it.
-2. Resolve the exercise with `scripts/resolve_exercise.py`. If context is absent or
-   ambiguous, search with `scripts/search_course.py` using distinctive terms from
-   the question or error.
+2. Use the `terminal` tool—not `execute_code`—to run
+   `scripts/resolve_exercise.py`. If context is absent or ambiguous, use the
+   `terminal` tool to run `scripts/search_course.py` with distinctive terms from
+   the question or error. API-server sessions cannot approve `execute_code`, so
+   never use it for this skill.
 3. Read the exact exercise Markdown and its module `README.md`. Read only the
    relevant module reference below for additional routing.
 4. Inspect a related implementation repository only when the question concerns
